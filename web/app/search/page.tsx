@@ -74,6 +74,7 @@ function toSearchResult(r: ApiSearchResult): SearchResult {
       sentences: 0,
       uploaded: "",
       expires_in_days: 30,
+      is_public: false,
     },
   };
 }
@@ -98,6 +99,7 @@ function toDoc(d: ApiDocument) {
     sentences: d.total_sentences,
     uploaded: new Date(d.created_at).toLocaleDateString(),
     expires_in_days: expiresInDays,
+    is_public: d.is_public,
   };
 }
 
@@ -292,7 +294,9 @@ export default function SearchPage() {
     }
   };
 
-  const docCount = docFilter.length || docs.length;
+  const publicDocs = docs.filter((d) => d.is_public);
+  const userDocs   = docs.filter((d) => !d.is_public);
+  const docCount   = docFilter.length || docs.length;
 
   return (
     <div className="app">
@@ -326,7 +330,8 @@ export default function SearchPage() {
 
           {phase !== "idle" && docs.length > 0 && (
             <DocFilter
-              docs={docs}
+              publicDocs={publicDocs}
+              userDocs={userDocs}
               selected={docFilter}
               onToggle={toggleDoc}
               onClear={() => setDocFilter([])}
@@ -347,7 +352,8 @@ export default function SearchPage() {
               </div>
 
               <DocLibrary
-                docs={docs}
+                publicDocs={publicDocs}
+                userDocs={userDocs}
                 onUploadClick={() => fileInputRef.current?.click()}
                 ingestingDocs={ingestingDocs}
               />

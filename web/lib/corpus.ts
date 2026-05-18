@@ -7,6 +7,7 @@ export interface Doc {
   sentences: number;
   uploaded: string;
   expires_in_days: number;
+  is_public: boolean;
 }
 
 export interface Sentence {
@@ -36,6 +37,7 @@ export const CORPUS_DOCS: Doc[] = [
     sentences: 412,
     uploaded: "3 days ago",
     expires_in_days: 27,
+    is_public: false,
   },
   {
     id: "doc-att",
@@ -46,6 +48,7 @@ export const CORPUS_DOCS: Doc[] = [
     sentences: 287,
     uploaded: "1 day ago",
     expires_in_days: 29,
+    is_public: false,
   },
   {
     id: "doc-lec",
@@ -56,6 +59,7 @@ export const CORPUS_DOCS: Doc[] = [
     sentences: 156,
     uploaded: "6 hours ago",
     expires_in_days: 30,
+    is_public: false,
   },
   {
     id: "doc-iso",
@@ -66,6 +70,7 @@ export const CORPUS_DOCS: Doc[] = [
     sentences: 94,
     uploaded: "11 minutes ago",
     expires_in_days: 30,
+    is_public: false,
   },
 ];
 

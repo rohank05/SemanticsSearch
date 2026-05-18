@@ -49,7 +49,7 @@ router.post("/", requireSession, async (req, res) => {
      FROM sentences s
      JOIN documents d ON d.id = s.document_id
      WHERE
-       (d.owner_id = $2 OR d.guest_session_id = $3)
+       (d.owner_id = $2 OR d.guest_session_id = $3 OR d.is_public = true)
        AND ($4::uuid[] IS NULL OR d.id = ANY($4))
        AND d.status = 'ready'
      ORDER BY s.embedding <=> $1::vector

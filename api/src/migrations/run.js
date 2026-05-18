@@ -5,7 +5,7 @@ import { pool } from "../db.js";
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 
-const migrations = ["001_init.sql", "002_upgrade_vectors.sql"];
+const migrations = ["001_init.sql", "002_upgrade_vectors.sql", "003_public_documents.sql"];
 
 for (const file of migrations) {
   const sql = readFileSync(join(__dir, file), "utf8");

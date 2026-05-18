@@ -56,22 +56,22 @@ router.post("/upload", requireSession, upload.single("file"), async (req, res) =
   res.status(202).json({ document_id: documentId, status: "pending" });
 });
 
-// GET /api/v1/documents — works for auth users, guests, and unauthenticated visitors
+// GET /api/v1/documents — returns public docs + caller's own docs
 router.get("/", optionalSession, async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT id, file_name, mime_type, status, total_sentences, expires_at, created_at
+    `SELECT id, file_name, mime_type, status, total_sentences, expires_at, created_at, is_public
      FROM documents
-     WHERE (owner_id = $1 OR guest_session_id = $2)
-     ORDER BY created_at DESC`,
+     WHERE is_public = true OR owner_id = $1 OR guest_session_id = $2
+     ORDER BY is_public DESC, created_at DESC`,
     [req.user?.sub ?? null, req.guestSessionId ?? null]
   );
   res.json({ documents: rows });
 });
 
 // GET /api/v1/documents/:id
-router.get("/:id", requireSession, async (req, res) => {
+router.get("/:id", optionalSession, async (req, res) => {
   const { rows } = await pool.query(
-    "SELECT id, file_name, mime_type, status, total_sentences, expires_at, created_at FROM documents WHERE id = $1 AND (owner_id = $2 OR guest_session_id = $3)",
+    "SELECT id, file_name, mime_type, status, total_sentences, expires_at, created_at, is_public FROM documents WHERE id = $1 AND (is_public = true OR owner_id = $2 OR guest_session_id = $3)",
     [req.params.id, req.user?.sub ?? null, req.guestSessionId ?? null]
   );
   if (!rows.length) return res.status(404).json({ error: "Not found" });
@@ -79,9 +79,9 @@ router.get("/:id", requireSession, async (req, res) => {
 });
 
 // GET /api/v1/documents/:id/sentences
-router.get("/:id/sentences", requireSession, async (req, res) => {
+router.get("/:id/sentences", optionalSession, async (req, res) => {
   const { rows: docRows } = await pool.query(
-    "SELECT id, file_name, mime_type, total_sentences FROM documents WHERE id = $1 AND (owner_id = $2 OR guest_session_id = $3) AND status = 'ready'",
+    "SELECT id, file_name, mime_type, total_sentences FROM documents WHERE id = $1 AND (is_public = true OR owner_id = $2 OR guest_session_id = $3) AND status = 'ready'",
     [req.params.id, req.user?.sub ?? null, req.guestSessionId ?? null]
   );
   if (!docRows.length) return res.status(404).json({ error: "Not found" });

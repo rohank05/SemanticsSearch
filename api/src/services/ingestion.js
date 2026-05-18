@@ -7,14 +7,23 @@ const pdfParse = require("pdf-parse");
 const mammoth = require("mammoth");
 const sbd = require("sbd");
 
+// Silence the torrent of "Warning: Unknown command / Skipping command" noise that
+// pdfjs emits for PDFs with non-standard content stream operators. These are benign
+// but pollute logs badly on large textbook-style PDFs.
+function silentWarn(fn) {
+  const orig = console.warn;
+  console.warn = () => {};
+  try { return fn(); } finally { console.warn = orig; }
+}
+
 // Extract text from uploaded buffer, returning [{text, pageNumber?}] per page.
 async function extractText(buffer, mimeType) {
   if (mimeType === "application/pdf" || mimeType === "pdf") {
-    const data = await pdfParse(buffer);
+    const data = await silentWarn(() => pdfParse(buffer));
     // pdf-parse gives per-page text in data.text, but not per-page array by default.
     // We use the render_page callback to get page-level text.
     const pages = [];
-    await pdfParse(buffer, {
+    await silentWarn(() => pdfParse(buffer, {
       pagerender(pageData) {
         return pageData.getTextContent().then((tc) => {
           const text = tc.items.map((i) => i.str).join(" ");
@@ -22,7 +31,7 @@ async function extractText(buffer, mimeType) {
           return text;
         });
       },
-    });
+    }));
     if (pages.length === 0) {
       // Fallback: treat whole doc as page 1
       pages.push(data.text);

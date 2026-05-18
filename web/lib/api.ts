@@ -48,6 +48,7 @@ export interface ApiDocument {
   total_sentences: number;
   expires_at: string;
   created_at: string;
+  is_public: boolean;
 }
 
 export async function uploadDocument(file: File): Promise<{ document_id: string; status: string }> {

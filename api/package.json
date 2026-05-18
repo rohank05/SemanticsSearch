@@ -8,6 +8,7 @@
     "migrate": "node --env-file=.env src/migrations/run.js"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "bcrypt": "^5.1.1",
     "compromise": "^14.14.4",
     "cookie-parser": "^1.4.7",

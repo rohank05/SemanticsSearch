@@ -531,6 +531,17 @@ kbd {
 .doc-chip-count { font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-4); margin-left: 2px; }
 .doc-chip--on .doc-chip-count { color: rgba(255,255,255,.55); }
 .doc-chip-name { max-width: 22ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.doc-chip--public { border-color: color-mix(in srgb, var(--accent) 40%, var(--rule)); }
+.doc-chip--public.doc-chip--on { border-color: var(--accent); background: var(--accent); color: #fff; }
+.doc-filter-sep {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+  padding: 0 2px;
+  align-self: center;
+}
 
 .results-stats {
   font-family: var(--font-mono);

@@ -30,10 +30,19 @@ npm run build     # production build
 ### External services required
 - **PostgreSQL** — `DATABASE_URL` in `api/.env`
 - **Ollama** (native, not Docker) — must be running on `localhost:11434`
-  - `phi3:mini` — query expansion (HyDE) + summarization
   - `nomic-embed-text` — document and query embeddings (768-dim)
+- **Google Gemini API** — `GEMINI_API_KEY` in `api/.env`
+  - `gemini-2.0-flash-lite` — query expansion (HyDE) + summarization
+  - Both degrade gracefully to `null` if `GEMINI_API_KEY` is absent
 
 Docker Compose only manages Ollama. PostgreSQL is run directly.
+
+### Admin: ingest public textbooks
+```bash
+cd api
+node --env-file=.env scripts/ingest-public.js ./books/chemistry.pdf "Chemistry Grade 10"
+```
+Public documents have `is_public = true`, no owner, and expire in 2099. They are visible to all users including unauthenticated guests.
 
 ## Architecture
 
@@ -100,8 +109,8 @@ All API routes are under `/v1/` (no `/api` prefix). nginx routes `/v1/` to Expre
 | `DATABASE_URL` | PostgreSQL connection string |
 | `JWT_ACCESS_SECRET` | Signs 1h access tokens |
 | `JWT_REFRESH_SECRET` | Signs 7d refresh tokens |
+| `GEMINI_API_KEY` | Google Gemini API key for HyDE + summarization |
 | `OLLAMA_URL` | Ollama base URL (default `http://localhost:11434`) |
-| `OLLAMA_MODEL` | LLM for HyDE + summarization (default `phi3:mini`) |
 | `OLLAMA_EMBED_MODEL` | Embedding model (default `nomic-embed-text`) |
 | `FRONTEND_URL` | CORS origin |
 | `PORT` | API port (default `4000`) |

@@ -1,45 +1,46 @@
-import fetch from "node-fetch";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const OLLAMA_URL = process.env.OLLAMA_URL || "http://localhost:11434";
-const MODEL = process.env.OLLAMA_MODEL || "mistral:7b-instruct-q4_K_M";
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const MODEL = "gemini-2.0-flash-lite";
+
+function getModel() {
+  if (!GEMINI_API_KEY) return null;
+  const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+  return genAI.getGenerativeModel({ model: MODEL });
+}
 
 // Rewrites a short query into a hypothetical document passage (HyDE technique).
-// Vectorizing the passage instead of the raw query dramatically improves recall
-// because the passage embedding is in the same space as actual document sentences.
-// Returns null when Ollama is unavailable or the query is already long enough.
+// Returns null when Gemini is unavailable or the query is already long enough.
 export async function expandQuery(query) {
-  if (query.trim().split(/\s+/).length > 10) return null; // already descriptive
+  if (query.trim().split(/\s+/).length > 10) return null;
+
+  const model = getModel();
+  if (!model) return null;
 
   const prompt = `Write one sentence as if it appeared in a document, directly addressing: "${query.trim()}"
 Output only the sentence, nothing else.`;
 
   try {
-    const res = await fetch(`${OLLAMA_URL}/api/generate`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: MODEL,
-        prompt,
-        stream: false,
-        options: { num_predict: 60, temperature: 0.1 },
-      }),
-      signal: AbortSignal.timeout(8_000),
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: { maxOutputTokens: 80, temperature: 0.1 },
     });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const expanded = data.response?.trim().replace(/^["']|["']$/g, "");
+    const expanded = result.response.text().trim().replace(/^["']|["']$/g, "");
     return expanded && expanded.length > 15 ? expanded : null;
   } catch {
     return null;
   }
 }
 
-// Returns null if Ollama is unavailable — caller degrades gracefully.
+// Returns null if Gemini is unavailable — caller degrades gracefully.
 export async function summarizeResults(query, results) {
   if (!results.length) return null;
 
+  const model = getModel();
+  if (!model) return null;
+
   const snippets = results
-    .slice(0, 6) // cap context to top 6 to keep prompt short
+    .slice(0, 6)
     .map((r, i) => {
       const loc = r.page_number ? `, page ${r.page_number}` : "";
       return `[${i + 1}] "${r.content}" — ${r.document_name}${loc}`;
@@ -57,28 +58,12 @@ ${snippets}
 Answer:`;
 
   try {
-    const res = await fetch(`${OLLAMA_URL}/api/generate`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model: MODEL, prompt, stream: false }),
-      signal: AbortSignal.timeout(120_000),
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: { maxOutputTokens: 300, temperature: 0.2 },
     });
-
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data.response?.trim() || null;
+    return result.response.text().trim() || null;
   } catch {
-    return null; // Ollama down or timed out — search results still return normally
-  }
-}
-
-export async function isOllamaAvailable() {
-  try {
-    const res = await fetch(`${OLLAMA_URL}/api/tags`, {
-      signal: AbortSignal.timeout(2_000),
-    });
-    return res.ok;
-  } catch {
-    return false;
+    return null;
   }
 }
