@@ -602,6 +602,25 @@ kbd {
   white-space: pre-wrap;
 }
 
+.synthesis-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 2px 0;
+}
+.synthesis-skel-line {
+  display: block;
+  height: 13px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--rule) 25%, var(--rule-2) 50%, var(--rule) 75%);
+  background-size: 200% 100%;
+  animation: skel-shimmer 1.4s ease infinite;
+}
+@keyframes skel-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
 /* ── Result card ───────────────────────────────────────────────────────── */
 .result {
   display: grid;

@@ -123,6 +123,25 @@ export interface SearchResponse {
   synthesis_ms: number | null;
 }
 
+export async function summarize(
+  query: string,
+  results: ApiSearchResult[],
+  signal?: AbortSignal
+): Promise<{ summary: string | null; synthesis_ms: number | null }> {
+  const snippets = results.slice(0, 6).map((r) => ({
+    content: r.content,
+    document_name: r.document_name,
+    page_number: r.page_number,
+  }));
+  const res = await apiFetch("/v1/search/summarize", {
+    method: "POST",
+    body: JSON.stringify({ query, results: snippets }),
+    signal,
+  });
+  if (!res.ok) return { summary: null, synthesis_ms: null };
+  return res.json();
+}
+
 export async function search(
   query: string,
   opts: { document_ids?: string[]; top_k?: number } = {}

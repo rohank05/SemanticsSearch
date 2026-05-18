@@ -19,6 +19,7 @@ import {
   getDocument,
   listDocuments,
   search,
+  summarize,
   getAccessToken,
 } from "@/lib/api";
 import type { ApiDocument, ApiSearchResult } from "@/lib/api";
@@ -100,7 +101,7 @@ function toDoc(d: ApiDocument) {
   };
 }
 
-// Poll a document until status is ready or error (max 60 s)
+// Poll a document until status is ready or error (max 10 min)
 async function pollUntilReady(
   docId: string,
   onProgress: (step: string, progress: number) => void
@@ -111,12 +112,11 @@ async function pollUntilReady(
     ready:      ["Ready", 100],
     error:      ["Error", 100],
   };
-  for (let i = 0; i < 60; i++) {
+  for (let i = 0; i < 600; i++) {
     await new Promise((r) => setTimeout(r, 1000));
     const doc = await getDocument(docId);
     const [step, progress] = STEP_MAP[doc.status] ?? ["Processing…", 50];
-    // Fake granular progress while processing
-    const fakeProgress = doc.status === "processing" ? 20 + Math.min(75, i * 5) : progress;
+    const fakeProgress = doc.status === "processing" ? 20 + Math.min(75, Math.floor(i / 4)) : progress;
     onProgress(step, fakeProgress);
     if (doc.status === "ready" || doc.status === "error") return doc;
   }
@@ -134,7 +134,9 @@ export default function SearchPage() {
   const [ingestingDocs, setIngestingDocs] = useState<IngestingDoc[]>([]);
   const [stats, setStats]           = useState<Stats | null>(null);
   const [summary, setSummary]       = useState<string | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
   const [expandedQuery, setExpandedQuery] = useState<string | null>(null);
+  const summarizeAbortRef = useRef<AbortController | null>(null);
   const [docs, setDocs]             = useState<ReturnType<typeof toDoc>[]>([]);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [isAuthed, setIsAuthed]     = useState(false);
@@ -170,33 +172,56 @@ export default function SearchPage() {
   // Debounced search — hits real API
   useEffect(() => {
     if (!query.trim()) {
-      setPhase("idle"); setResults([]); setActiveQuery(""); setStats(null); setSummary(null); setExpandedQuery(null); setSearchError(null);
+      summarizeAbortRef.current?.abort();
+      setPhase("idle"); setResults([]); setActiveQuery(""); setStats(null); setSummary(null); setSummaryLoading(false); setExpandedQuery(null); setSearchError(null);
       return;
     }
     setPhase("searching");
     setSearchError(null);
     const id = setTimeout(async () => {
+      // Cancel any in-flight summarize from previous query
+      summarizeAbortRef.current?.abort();
+      setSummary(null);
+      setSummaryLoading(false);
+
       try {
         const data = await search(query, {
           document_ids: docFilter.length ? docFilter : undefined,
           top_k: 12,
         });
-        setResults(data.results.map(toSearchResult));
-        setSummary(data.summary ?? null);
+        const apiResults = data.results;
+        setResults(apiResults.map(toSearchResult));
         setExpandedQuery(data.expanded_query ?? null);
         setActiveQuery(query);
         setStats({
-          results: data.results.length,
+          results: apiResults.length,
           queryVectorMs: data.query_vector_ms,
           searchMs: data.search_ms,
-          synthesisMs: data.synthesis_ms ?? null,
+          synthesisMs: null,
         });
         setPhase("results");
+
+        // Fire summarize as a background request — doesn't block search results
+        if (apiResults.length > 0) {
+          setSummaryLoading(true);
+          const ctrl = new AbortController();
+          summarizeAbortRef.current = ctrl;
+          summarize(query, apiResults, ctrl.signal)
+            .then(({ summary: s, synthesis_ms }) => {
+              setSummary(s);
+              setSummaryLoading(false);
+              if (synthesis_ms != null) {
+                setStats((prev) => prev ? { ...prev, synthesisMs: synthesis_ms } : prev);
+              }
+            })
+            .catch(() => setSummaryLoading(false));
+        }
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : "Search failed";
         setSearchError(msg);
         setResults([]);
         setSummary(null);
+        setSummaryLoading(false);
         setExpandedQuery(null);
         setPhase("results");
       }
@@ -215,22 +240,34 @@ export default function SearchPage() {
 
   const handleFilesChosen = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    const fileArray = Array.from(files); // snapshot before any await — FileList is live and cleared by e.target.value=""
+    const fileArray = Array.from(files); // snapshot — FileList is live and cleared by e.target.value=""
     await ensureGuestSession();
 
-    const uploadOne = async (file: File) => {
-      const key = `${file.name}-${Date.now()}-${Math.random()}`;
-      const ext = (file.name.split(".").pop() ?? "").toLowerCase();
-      const mime = ["pdf", "docx", "txt"].includes(ext) ? ext : "txt";
-      const short = file.name.replace(/\.[^.]+$/, "").slice(0, 38);
+    // Build queue entries and show all files immediately so user sees the full list
+    type QueueEntry = { file: File; key: string; mime: string; short: string };
+    const entries: QueueEntry[] = fileArray.map((file) => ({
+      file,
+      key: `${file.name}-${Date.now()}-${Math.random()}`,
+      mime: (["pdf", "docx", "txt"].includes((file.name.split(".").pop() ?? "").toLowerCase())
+        ? (file.name.split(".").pop() ?? "").toLowerCase() : "txt"),
+      short: file.name.replace(/\.[^.]+$/, "").slice(0, 38),
+    }));
 
+    setIngestingDocs((prev) => [
+      ...prev,
+      ...entries.map(({ key, file, mime, short }) => ({
+        key, id: key, file_name: file.name, short, mime,
+        status: "pending", step: "Queued…", progress: 0,
+      })),
+    ]);
+
+    // Process sequentially — Ollama is single-threaded; parallel ingestion
+    // saturates it and causes later documents to time out.
+    for (const { file, key } of entries) {
       const patch = (updates: Partial<IngestingDoc>) =>
         setIngestingDocs((prev) => prev.map((d) => d.key === key ? { ...d, ...updates } : d));
 
-      setIngestingDocs((prev) => [
-        ...prev,
-        { key, id: key, file_name: file.name, short, mime, status: "pending", step: "Uploading…", progress: 4 },
-      ]);
+      patch({ step: "Uploading…", progress: 4 });
 
       try {
         const { document_id } = await uploadDocument(file);
@@ -246,13 +283,13 @@ export default function SearchPage() {
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Upload failed";
         patch({ step: msg, progress: 100, status: "error" });
-        setTimeout(() => setIngestingDocs((prev) => prev.filter((d) => d.key !== key)), 3000);
-        return;
+        await new Promise((r) => setTimeout(r, 3000));
+        setIngestingDocs((prev) => prev.filter((d) => d.key !== key));
+        continue;
       }
-      setTimeout(() => setIngestingDocs((prev) => prev.filter((d) => d.key !== key)), 1400);
-    };
-
-    fileArray.forEach((f) => uploadOne(f));
+      await new Promise((r) => setTimeout(r, 1400));
+      setIngestingDocs((prev) => prev.filter((d) => d.key !== key));
+    }
   };
 
   const docCount = docFilter.length || docs.length;
@@ -262,59 +299,64 @@ export default function SearchPage() {
       <Header onSignIn={() => setSignInOpen(true)} isAuthed={isAuthed} />
 
       <main className={`main${phase === "idle" ? " main--hero" : ""}`}>
-        {phase === "idle" && (
-          <section className="hero">
-            <p className="eyebrow">Semantic search · sentence-level retrieval</p>
-            <h1 className="hero-h">
-              Search your documents{" "}
-              <span className="serif-it">like you think.</span>
-            </h1>
-            <p className="hero-sub">
-              Ask anything in plain English. Every match returns the exact sentence,
-              its surrounding context, and a citation back to the page.
-            </p>
+        {/* Unified search header — SearchInput stays at a stable tree position
+            so React never unmounts/remounts it on phase change (which would drop focus). */}
+        <div className={phase === "idle" ? "hero" : "results-top"}>
+          {phase === "idle" && (
+            <>
+              <p className="eyebrow">Semantic search · sentence-level retrieval</p>
+              <h1 className="hero-h">
+                Search your documents{" "}
+                <span className="serif-it">like you think.</span>
+              </h1>
+              <p className="hero-sub">
+                Ask anything in plain English. Every match returns the exact sentence,
+                its surrounding context, and a citation back to the page.
+              </p>
+            </>
+          )}
 
-            <SearchInput value={query} onChange={setQuery} onSubmit={handleSubmit} />
+          <SearchInput
+            value={query}
+            onChange={setQuery}
+            onSubmit={handleSubmit}
+            busy={phase === "searching"}
+            compact={phase !== "idle"}
+          />
 
-            <div className="suggested">
-              <span className="suggested-lbl">Try</span>
-              <div className="suggested-chips">
-                {SUGGESTED_QUERIES.slice(0, 4).map((q) => (
-                  <button key={q} className="sugg-chip" onClick={() => setQuery(q)}>
-                    {q}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <DocLibrary
+          {phase !== "idle" && docs.length > 0 && (
+            <DocFilter
               docs={docs}
-              onUploadClick={() => fileInputRef.current?.click()}
-              ingestingDocs={ingestingDocs}
+              selected={docFilter}
+              onToggle={toggleDoc}
+              onClear={() => setDocFilter([])}
             />
-          </section>
-        )}
+          )}
+
+          {phase === "idle" && (
+            <>
+              <div className="suggested">
+                <span className="suggested-lbl">Try</span>
+                <div className="suggested-chips">
+                  {SUGGESTED_QUERIES.slice(0, 4).map((q) => (
+                    <button key={q} className="sugg-chip" onClick={() => setQuery(q)}>
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <DocLibrary
+                docs={docs}
+                onUploadClick={() => fileInputRef.current?.click()}
+                ingestingDocs={ingestingDocs}
+              />
+            </>
+          )}
+        </div>
 
         {phase !== "idle" && (
           <section className="results-view">
-            <div className="results-top">
-              <SearchInput
-                value={query}
-                onChange={setQuery}
-                onSubmit={handleSubmit}
-                busy={phase === "searching"}
-                compact
-              />
-              {docs.length > 0 && (
-                <DocFilter
-                  docs={docs}
-                  selected={docFilter}
-                  onToggle={toggleDoc}
-                  onClear={() => setDocFilter([])}
-                />
-              )}
-            </div>
-
             {phase === "searching" && (
               <>
                 <div className="results-stats results-stats--ghost">
@@ -353,8 +395,8 @@ export default function SearchPage() {
                       <EmptyState query={activeQuery} expandedQuery={expandedQuery} />
                     ) : (
                       <>
-                        {summary && (
-                          <SynthesisCard summary={summary} synthesisMs={stats?.synthesisMs ?? null} />
+                        {(summary || summaryLoading) && (
+                          <SynthesisCard summary={summary} synthesisMs={stats?.synthesisMs ?? null} loading={summaryLoading} />
                         )}
                         <div className="results-list">
                           {results.map((r, i) => (
@@ -376,25 +418,25 @@ export default function SearchPage() {
                 )}
               </>
             )}
-
-            {ingestingDocs.length > 0 && (
-              <div className="ingest-toast">
-                {ingestingDocs.map((doc) => (
-                  <div key={doc.key} className="ingest-toast-item">
-                    <div className="ingest-toast-h">
-                      <span className="pulse-dot pulse-dot--accent" />
-                      <b>Ingesting {doc.short}</b>
-                      <span className="ingest-toast-pct">{doc.progress}%</span>
-                    </div>
-                    <div className="ingest-progress">
-                      <div className="ingest-bar" style={{ width: `${doc.progress}%` }} />
-                    </div>
-                    <div className="ingest-step">{doc.step}</div>
-                  </div>
-                ))}
-              </div>
-            )}
           </section>
+        )}
+
+        {ingestingDocs.length > 0 && (
+          <div className="ingest-toast">
+            {ingestingDocs.map((doc) => (
+              <div key={doc.key} className="ingest-toast-item">
+                <div className="ingest-toast-h">
+                  <span className="pulse-dot pulse-dot--accent" />
+                  <b>Ingesting {doc.short}</b>
+                  <span className="ingest-toast-pct">{doc.progress}%</span>
+                </div>
+                <div className="ingest-progress">
+                  <div className="ingest-bar" style={{ width: `${doc.progress}%` }} />
+                </div>
+                <div className="ingest-step">{doc.step}</div>
+              </div>
+            ))}
+          </div>
         )}
       </main>
 

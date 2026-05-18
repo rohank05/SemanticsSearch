@@ -8,7 +8,7 @@ const router = Router();
 
 // POST /api/v1/search
 router.post("/", requireSession, async (req, res) => {
-  const { query, document_ids, top_k = 10, summarize = true } = req.body;
+  const { query, document_ids, top_k = 10 } = req.body;
   if (!query || typeof query !== "string" || !query.trim()) {
     return res.status(400).json({ error: "query is required" });
   }
@@ -59,20 +59,28 @@ router.post("/", requireSession, async (req, res) => {
   const rows = rawRows.filter((r) => Number(r.score) >= MIN_SCORE).slice(0, k);
   const searchMs = Date.now() - searchStart;
 
-  // Run summarization in parallel — never blocks or fails the search response
-  const synthesisStart = Date.now();
-  const summary = summarize && rows.length > 0
-    ? await summarizeResults(query.trim(), rows)
-    : null;
-  const synthesisMs = Date.now() - synthesisStart;
-
   res.json({
     results: rows,
-    summary,
-    expanded_query: expandedQuery,   // null when Ollama unavailable or query already long
+    summary: null,            // summary is fetched separately via POST /summarize
+    expanded_query: expandedQuery,
     query_vector_ms: queryVectorMs,
     search_ms: searchMs,
-    synthesis_ms: summary != null ? synthesisMs : null,
+    synthesis_ms: null,
+  });
+});
+
+// POST /v1/search/summarize — called async by the frontend after results are shown.
+// Kept separate so the main search response is never blocked by phi3:mini.
+router.post("/summarize", requireSession, async (req, res) => {
+  const { query, results } = req.body;
+  if (!query || !Array.isArray(results) || results.length === 0) {
+    return res.json({ summary: null, synthesis_ms: null });
+  }
+  const start = Date.now();
+  const summary = await summarizeResults(query, results);
+  res.json({
+    summary,
+    synthesis_ms: summary != null ? Date.now() - start : null,
   });
 });
 

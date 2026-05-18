@@ -61,7 +61,7 @@ Answer:`;
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ model: MODEL, prompt, stream: false }),
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(120_000),
     });
 
     if (!res.ok) return null;
