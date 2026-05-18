@@ -19,12 +19,37 @@ function authHeader(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
+async function refreshAccessToken(): Promise<boolean> {
+  try {
+    const res = await fetch(`${BASE}/v1/auth/refresh`, {
+      method: "POST",
+      credentials: "include",
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    if (data.access_token) { setAccessToken(data.access_token); return true; }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+async function apiFetch(path: string, init: RequestInit = {}, _retry = false): Promise<Response> {
   const res = await fetch(`${BASE}${path}`, {
     ...init,
     credentials: "include",
     headers: { "Content-Type": "application/json", ...guestHeader(), ...authHeader(), ...init.headers },
   });
+
+  // On 401, attempt a silent token refresh once then retry
+  if (res.status === 401 && !_retry) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) return apiFetch(path, init, true);
+    // Refresh failed — token and session are gone; notify the app
+    clearAccessToken();
+    if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("auth:expired"));
+  }
+
   return res;
 }
 

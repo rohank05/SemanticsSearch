@@ -171,6 +171,13 @@ export default function SearchPage() {
     loadDocs();
   }, [loadDocs]);
 
+  // Sign the user out silently when the refresh token expires
+  useEffect(() => {
+    const handle = () => { setIsAuthed(false); setSignInOpen(true); };
+    window.addEventListener("auth:expired", handle);
+    return () => window.removeEventListener("auth:expired", handle);
+  }, []);
+
   // Debounced search — hits real API
   useEffect(() => {
     if (!query.trim()) {
