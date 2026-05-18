@@ -34,6 +34,13 @@ async function refreshAccessToken(): Promise<boolean> {
   }
 }
 
+function signalAuthExpired() {
+  clearAccessToken();
+  if (typeof globalThis !== "undefined" && globalThis.window) {
+    globalThis.window.dispatchEvent(new CustomEvent("auth:expired"));
+  }
+}
+
 async function apiFetch(path: string, init: RequestInit = {}, _retry = false): Promise<Response> {
   const res = await fetch(`${BASE}${path}`, {
     ...init,
@@ -41,13 +48,28 @@ async function apiFetch(path: string, init: RequestInit = {}, _retry = false): P
     headers: { "Content-Type": "application/json", ...guestHeader(), ...authHeader(), ...init.headers },
   });
 
-  // On 401, attempt a silent token refresh once then retry
   if (res.status === 401 && !_retry) {
     const refreshed = await refreshAccessToken();
     if (refreshed) return apiFetch(path, init, true);
-    // Refresh failed — token and session are gone; notify the app
-    clearAccessToken();
-    if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("auth:expired"));
+    signalAuthExpired();
+  }
+
+  return res;
+}
+
+// Multipart upload — cannot use apiFetch (browser must set Content-Type with boundary)
+async function apiUpload(path: string, form: FormData, _retry = false): Promise<Response> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    credentials: "include",
+    headers: { ...guestHeader(), ...authHeader() },
+    body: form,
+  });
+
+  if (res.status === 401 && !_retry) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) return apiUpload(path, form, true);
+    signalAuthExpired();
   }
 
   return res;
@@ -79,13 +101,7 @@ export interface ApiDocument {
 export async function uploadDocument(file: File): Promise<{ document_id: string; status: string }> {
   const form = new FormData();
   form.append("file", file);
-  const res = await fetch(`${BASE}/v1/documents/upload`, {
-    method: "POST",
-    credentials: "include",
-    headers: { ...guestHeader(), ...authHeader() },
-    body: form,
-    // no Content-Type header — browser sets multipart boundary automatically
-  });
+  const res = await apiUpload("/v1/documents/upload", form);
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
     throw new Error(err.error ?? "Upload failed");
