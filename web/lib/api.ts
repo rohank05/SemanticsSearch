@@ -129,7 +129,7 @@ export async function summarize(
   results: ApiSearchResult[],
   signal?: AbortSignal
 ): Promise<{ summary: string | null; synthesis_ms: number | null }> {
-  const snippets = results.slice(0, 6).map((r) => ({
+  const snippets = results.slice(0, 8).map((r) => ({
     content: r.content,
     document_name: r.document_name,
     page_number: r.page_number,

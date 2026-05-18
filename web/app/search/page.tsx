@@ -427,23 +427,35 @@ export default function SearchPage() {
           </section>
         )}
 
-        {ingestingDocs.length > 0 && (
-          <div className="ingest-toast">
-            {ingestingDocs.map((doc) => (
-              <div key={doc.key} className="ingest-toast-item">
-                <div className="ingest-toast-h">
-                  <span className="pulse-dot pulse-dot--accent" />
-                  <b>Ingesting {doc.short}</b>
-                  <span className="ingest-toast-pct">{doc.progress}%</span>
+        {ingestingDocs.length > 0 && (() => {
+          const active = ingestingDocs.filter((d) => d.step !== "Queued…");
+          const queued = ingestingDocs.filter((d) => d.step === "Queued…");
+          // Show up to 2 active items; collapse queued items into a count line
+          const visible = active.length > 0 ? active.slice(0, 2) : ingestingDocs.slice(0, 1);
+          const hiddenCount = ingestingDocs.length - visible.length;
+          return (
+            <div className="ingest-toast">
+              {visible.map((doc) => (
+                <div key={doc.key} className="ingest-toast-item">
+                  <div className="ingest-toast-h">
+                    <span className="pulse-dot pulse-dot--accent" />
+                    <b>{doc.short}</b>
+                    <span className="ingest-toast-pct">{doc.progress}%</span>
+                  </div>
+                  <div className="ingest-progress">
+                    <div className="ingest-bar" style={{ width: `${doc.progress}%` }} />
+                  </div>
+                  <div className="ingest-step">{doc.step}</div>
                 </div>
-                <div className="ingest-progress">
-                  <div className="ingest-bar" style={{ width: `${doc.progress}%` }} />
+              ))}
+              {hiddenCount > 0 && (
+                <div className="ingest-toast-queue">
+                  + {hiddenCount} file{hiddenCount !== 1 ? "s" : ""} queued
                 </div>
-                <div className="ingest-step">{doc.step}</div>
-              </div>
-            ))}
-          </div>
-        )}
+              )}
+            </div>
+          );
+        })()}
       </main>
 
       <footer className="site-ft">

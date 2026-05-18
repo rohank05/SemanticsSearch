@@ -921,7 +921,15 @@ mark.match-hl {
 .ingest-toast { display: flex; flex-direction: column; gap: 12px; }
 .ingest-toast-item + .ingest-toast-item { border-top: 1px solid var(--rule); padding-top: 12px; }
 .ingest-toast-h { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 8px; }
-.ingest-toast-h b { font-weight: 500; }
+.ingest-toast-h b { font-weight: 500; max-width: 18ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ingest-toast-queue {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-4);
+  padding-top: 8px;
+  border-top: 1px solid var(--rule);
+  margin-top: 4px;
+}
 .ingest-toast-pct { margin-left: auto; font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-3); }
 
 /* ── Footer ────────────────────────────────────────────────────────────── */

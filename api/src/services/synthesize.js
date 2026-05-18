@@ -1,7 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const MODEL = "gemini-2.0-flash-lite";
+const MODEL = "gemini-2.5-flash";
 
 function getModel() {
   if (!GEMINI_API_KEY) return null;
@@ -27,7 +27,8 @@ Output only the sentence, nothing else.`;
     });
     const expanded = result.response.text().trim().replace(/^["']|["']$/g, "");
     return expanded && expanded.length > 15 ? expanded : null;
-  } catch {
+  } catch (err) {
+    console.error("[Gemini expandQuery]", err?.message ?? err);
     return null;
   }
 }
@@ -40,15 +41,21 @@ export async function summarizeResults(query, results) {
   if (!model) return null;
 
   const snippets = results
-    .slice(0, 6)
+    .slice(0, 8)
     .map((r, i) => {
       const loc = r.page_number ? `, page ${r.page_number}` : "";
       return `[${i + 1}] "${r.content}" — ${r.document_name}${loc}`;
     })
     .join("\n");
 
-  const prompt = `You are a precise document assistant. Answer the user's query using ONLY the excerpts below.
-Be concise (2-4 sentences). Cite sources as [1], [2], etc. If the excerpts don't contain a clear answer, say so briefly.
+  const prompt = `You are a knowledgeable document assistant. Using ONLY the excerpts below, write a thorough answer to the user's query.
+
+Guidelines:
+- Write 3-6 sentences covering the key ideas across all relevant excerpts
+- Cite sources inline as [1], [2], etc. after each claim
+- If the concept has multiple parts or steps, briefly explain each
+- Use plain, clear language — no bullet points, just flowing prose
+- If the excerpts don't contain enough information, say so concisely
 
 Query: ${query}
 
@@ -60,10 +67,11 @@ Answer:`;
   try {
     const result = await model.generateContent({
       contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: { maxOutputTokens: 300, temperature: 0.2 },
+      generationConfig: { maxOutputTokens: 600, temperature: 0.3 },
     });
     return result.response.text().trim() || null;
-  } catch {
+  } catch (err) {
+    console.error("[Gemini summarize]", err?.message ?? err);
     return null;
   }
 }

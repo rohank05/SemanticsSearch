@@ -13,7 +13,7 @@ export default function SynthesisCard({ summary, synthesisMs, loading }: Props) 
         <span className="synthesis-icon">◈</span>
         <span className="synthesis-label">AI Summary</span>
         {synthesisMs != null && (
-          <span className="synthesis-time mono muted">{synthesisMs} ms · phi3:mini</span>
+          <span className="synthesis-time mono muted">{synthesisMs} ms · gemini-2.5-flash</span>
         )}
         {loading && (
           <span className="synthesis-time mono muted">Generating…</span>
