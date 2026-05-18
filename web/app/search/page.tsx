@@ -16,7 +16,6 @@ import type { SearchResult } from "@/lib/corpus";
 import {
   createGuestSession,
   uploadDocument,
-  getDocument,
   listDocuments,
   search,
   summarize,
@@ -105,27 +104,6 @@ function toDoc(d: ApiDocument) {
   };
 }
 
-// Poll a document until status is ready or error (max 10 min)
-async function pollUntilReady(
-  docId: string,
-  onProgress: (step: string, progress: number) => void
-): Promise<ApiDocument> {
-  const STEP_MAP: Record<string, [string, number]> = {
-    pending:    ["Validating file…", 8],
-    processing: ["Processing…", 55],
-    ready:      ["Ready", 100],
-    error:      ["Error", 100],
-  };
-  for (let i = 0; i < 600; i++) {
-    await new Promise((r) => setTimeout(r, 1000));
-    const doc = await getDocument(docId);
-    const [step, progress] = STEP_MAP[doc.status] ?? ["Processing…", 50];
-    const fakeProgress = doc.status === "processing" ? 20 + Math.min(75, Math.floor(i / 4)) : progress;
-    onProgress(step, fakeProgress);
-    if (doc.status === "ready" || doc.status === "error") return doc;
-  }
-  throw new Error("Ingestion timed out");
-}
 
 export default function SearchPage() {
   const [query, setQuery]           = useState("");
@@ -259,56 +237,32 @@ export default function SearchPage() {
 
   const handleFilesChosen = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    const fileArray = Array.from(files); // snapshot — FileList is live and cleared by e.target.value=""
+    const fileArray = Array.from(files); // snapshot before e.target.value="" clears it
     await ensureGuestSession();
 
-    // Build queue entries and show all files immediately so user sees the full list
-    type QueueEntry = { file: File; key: string; mime: string; short: string };
-    const entries: QueueEntry[] = fileArray.map((file) => ({
-      file,
-      key: `${file.name}-${Date.now()}-${Math.random()}`,
-      mime: (["pdf", "docx", "txt"].includes((file.name.split(".").pop() ?? "").toLowerCase())
-        ? (file.name.split(".").pop() ?? "").toLowerCase() : "txt"),
-      short: file.name.replace(/\.[^.]+$/, "").slice(0, 38),
-    }));
+    for (const file of fileArray) {
+      const key = `${file.name}-${Date.now()}-${Math.random()}`;
+      const short = file.name.replace(/\.[^.]+$/, "").slice(0, 38);
+      const mime = (["pdf", "docx", "txt"].includes((file.name.split(".").pop() ?? "").toLowerCase())
+        ? (file.name.split(".").pop() ?? "").toLowerCase() : "txt");
 
-    setIngestingDocs((prev) => [
-      ...prev,
-      ...entries.map(({ key, file, mime, short }) => ({
+      setIngestingDocs((prev) => [...prev, {
         key, id: key, file_name: file.name, short, mime,
-        status: "pending", step: "Queued…", progress: 0,
-      })),
-    ]);
-
-    // Process sequentially — Ollama is single-threaded; parallel ingestion
-    // saturates it and causes later documents to time out.
-    for (const { file, key } of entries) {
-      const patch = (updates: Partial<IngestingDoc>) =>
-        setIngestingDocs((prev) => prev.map((d) => d.key === key ? { ...d, ...updates } : d));
-
-      patch({ step: "Uploading…", progress: 4 });
+        status: "pending", step: "Uploading…", progress: 50,
+      }]);
 
       try {
-        const { document_id } = await uploadDocument(file);
-        patch({ id: document_id, step: "Extracting text…", progress: 12 });
-
-        const finished = await pollUntilReady(document_id, (step, progress) => {
-          patch({ step, progress, status: "processing" });
-        });
-
-        if (finished.status === "ready") {
-          setDocs((prev) => [toDoc(finished), ...prev]);
-        }
+        await uploadDocument(file);
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Upload failed";
-        patch({ step: msg, progress: 100, status: "error" });
-        await new Promise((r) => setTimeout(r, 3000));
-        setIngestingDocs((prev) => prev.filter((d) => d.key !== key));
-        continue;
+        setIngestingDocs((prev) => prev.map((d) => d.key === key
+          ? { ...d, step: msg, status: "error", progress: 100 } : d));
+        await new Promise((r) => setTimeout(r, 2500));
       }
-      await new Promise((r) => setTimeout(r, 1400));
       setIngestingDocs((prev) => prev.filter((d) => d.key !== key));
     }
+    // Refresh doc list — newly uploaded docs appear as pending cards and are polled by the worker
+    loadDocs();
   };
 
   const publicDocs    = docs.filter((d) => d.is_public && d.status === "ready");
