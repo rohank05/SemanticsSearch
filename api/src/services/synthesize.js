@@ -23,7 +23,7 @@ Output only the sentence, nothing else.`;
   try {
     const result = await model.generateContent({
       contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: { maxOutputTokens: 80, temperature: 0.1 },
+      generationConfig: { maxOutputTokens: 80, temperature: 0.1, thinkingConfig: { thinkingBudget: 0 } },
     });
     const expanded = result.response.text().trim().replace(/^["']|["']$/g, "");
     return expanded && expanded.length > 15 ? expanded : null;
@@ -67,7 +67,11 @@ Answer:`;
   try {
     const result = await model.generateContent({
       contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: { maxOutputTokens: 600, temperature: 0.3 },
+      generationConfig: {
+        maxOutputTokens: 1024,
+        temperature: 0.3,
+        thinkingConfig: { thinkingBudget: 0 },
+      },
     });
     return result.response.text().trim() || null;
   } catch (err) {
