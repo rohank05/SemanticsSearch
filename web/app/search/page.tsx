@@ -19,6 +19,7 @@ import {
   getDocument,
   listDocuments,
   search,
+  getAccessToken,
 } from "@/lib/api";
 import type { ApiDocument, ApiSearchResult } from "@/lib/api";
 
@@ -136,6 +137,7 @@ export default function SearchPage() {
   const [expandedQuery, setExpandedQuery] = useState<string | null>(null);
   const [docs, setDocs]             = useState<ReturnType<typeof toDoc>[]>([]);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [isAuthed, setIsAuthed]     = useState(false);
   const [density]                   = useState<Density>("regular");
   const [showScore]                 = useState(true);
   const [showContext]               = useState(true);
@@ -153,12 +155,17 @@ export default function SearchPage() {
     }
   }, []);
 
-  // Load real document library on mount
-  useEffect(() => {
+  const loadDocs = useCallback(() => {
     listDocuments()
       .then((apiDocs) => setDocs(apiDocs.filter((d) => d.status === "ready").map(toDoc)))
-      .catch(() => {}); // Not signed in yet — silently skip
+      .catch(() => {});
   }, []);
+
+  // Load real document library on mount; detect existing auth token
+  useEffect(() => {
+    if (getAccessToken()) setIsAuthed(true);
+    loadDocs();
+  }, [loadDocs]);
 
   // Debounced search — hits real API
   useEffect(() => {
@@ -252,7 +259,7 @@ export default function SearchPage() {
 
   return (
     <div className="app">
-      <Header onSignIn={() => setSignInOpen(true)} />
+      <Header onSignIn={() => setSignInOpen(true)} isAuthed={isAuthed} />
 
       <main className={`main${phase === "idle" ? " main--hero" : ""}`}>
         {phase === "idle" && (
@@ -415,7 +422,11 @@ export default function SearchPage() {
         onClose={() => setOpenResult(null)}
       />
 
-      <SignInModal open={signInOpen} onClose={() => setSignInOpen(false)} />
+      <SignInModal
+        open={signInOpen}
+        onClose={() => setSignInOpen(false)}
+        onSuccess={() => { setIsAuthed(true); loadDocs(); }}
+      />
     </div>
   );
 }

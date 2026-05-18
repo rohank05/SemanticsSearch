@@ -31,7 +31,7 @@ async function apiFetch(path: string, init: RequestInit = {}): Promise<Response>
 // ── Guest session ───────────────────────────────────────────────────────────
 
 export async function createGuestSession(): Promise<{ guest_session_id: string }> {
-  const res = await apiFetch("/api/v1/guest/session", { method: "POST" });
+  const res = await apiFetch("/v1/guest/session", { method: "POST" });
   if (!res.ok) throw new Error("Failed to create guest session");
   const data = await res.json();
   setGuestId(data.guest_session_id);
@@ -53,10 +53,10 @@ export interface ApiDocument {
 export async function uploadDocument(file: File): Promise<{ document_id: string; status: string }> {
   const form = new FormData();
   form.append("file", file);
-  const res = await fetch(`${BASE}/api/v1/documents/upload`, {
+  const res = await fetch(`${BASE}/v1/documents/upload`, {
     method: "POST",
     credentials: "include",
-    headers: guestHeader(),
+    headers: { ...guestHeader(), ...authHeader() },
     body: form,
     // no Content-Type header — browser sets multipart boundary automatically
   });
@@ -68,26 +68,26 @@ export async function uploadDocument(file: File): Promise<{ document_id: string;
 }
 
 export async function getDocument(id: string): Promise<ApiDocument> {
-  const res = await apiFetch(`/api/v1/documents/${id}`);
+  const res = await apiFetch(`/v1/documents/${id}`);
   if (!res.ok) throw new Error("Failed to fetch document");
   return res.json();
 }
 
 export async function getDocumentSentences(id: string): Promise<{ document: ApiDocument; sentences: ApiSentence[] }> {
-  const res = await apiFetch(`/api/v1/documents/${id}/sentences`);
+  const res = await apiFetch(`/v1/documents/${id}/sentences`);
   if (!res.ok) throw new Error("Failed to load document");
   return res.json();
 }
 
 export async function listDocuments(): Promise<ApiDocument[]> {
-  const res = await apiFetch("/api/v1/documents");
+  const res = await apiFetch("/v1/documents");
   if (!res.ok) throw new Error("Failed to list documents");
   const data = await res.json();
   return data.documents;
 }
 
 export async function deleteDocument(id: string): Promise<void> {
-  const res = await apiFetch(`/api/v1/documents/${id}`, { method: "DELETE" });
+  const res = await apiFetch(`/v1/documents/${id}`, { method: "DELETE" });
   if (!res.ok) throw new Error("Failed to delete document");
 }
 
@@ -127,7 +127,7 @@ export async function search(
   query: string,
   opts: { document_ids?: string[]; top_k?: number } = {}
 ): Promise<SearchResponse> {
-  const res = await apiFetch("/api/v1/search", {
+  const res = await apiFetch("/v1/search", {
     method: "POST",
     body: JSON.stringify({ query, ...opts }),
   });
@@ -142,7 +142,7 @@ export async function search(
 // ── Auth ────────────────────────────────────────────────────────────────────
 
 export async function login(email: string, password: string) {
-  const res = await apiFetch("/api/v1/auth/login", {
+  const res = await apiFetch("/v1/auth/login", {
     method: "POST",
     body: JSON.stringify({ email, password }),
   });
@@ -156,7 +156,7 @@ export async function login(email: string, password: string) {
 }
 
 export async function register(email: string, password: string) {
-  const res = await apiFetch("/api/v1/auth/register", {
+  const res = await apiFetch("/v1/auth/register", {
     method: "POST",
     body: JSON.stringify({ email, password }),
   });
@@ -170,5 +170,5 @@ export async function register(email: string, password: string) {
 }
 
 export async function logout() {
-  await apiFetch("/api/v1/auth/logout", { method: "POST" });
+  await apiFetch("/v1/auth/logout", { method: "POST" });
 }

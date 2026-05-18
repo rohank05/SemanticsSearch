@@ -4,16 +4,17 @@ import { useEffect, useState } from "react";
 
 interface HeaderProps {
   onSignIn: () => void;
-  showCountdown?: boolean;
+  isAuthed?: boolean;
 }
 
-export default function Header({ onSignIn, showCountdown = true }: HeaderProps) {
+export default function Header({ onSignIn, isAuthed = false }: HeaderProps) {
   const [seconds, setSeconds] = useState(600);
 
   useEffect(() => {
+    if (isAuthed) return;
     const id = setInterval(() => setSeconds((s) => (s > 0 ? s - 1 : 0)), 1000);
     return () => clearInterval(id);
-  }, []);
+  }, [isAuthed]);
 
   const mm = String(Math.floor(seconds / 60));
   const ss = String(seconds % 60).padStart(2, "0");
@@ -35,7 +36,12 @@ export default function Header({ onSignIn, showCountdown = true }: HeaderProps) 
       </div>
 
       <nav className="site-nav">
-        {showCountdown && (
+        {isAuthed ? (
+          <div className="guest-pill" title="Signed in — documents saved for 30 days">
+            <span className="pulse-dot" style={{ background: "var(--ok)" }} />
+            <span className="guest-pill-lbl">Signed in</span>
+          </div>
+        ) : (
           <div className={`guest-pill${warn ? " guest-pill--warn" : ""}`} title="Guest session — data deleted after countdown">
             <span className="pulse-dot" />
             <span className="guest-pill-lbl">Guest</span>
@@ -44,8 +50,7 @@ export default function Header({ onSignIn, showCountdown = true }: HeaderProps) 
             <span className="guest-pill-suffix">left</span>
           </div>
         )}
-        <a className="nav-link" href="#">Docs</a>
-        <button className="nav-btn" onClick={onSignIn}>Sign in</button>
+        {!isAuthed && <button className="nav-btn" onClick={onSignIn}>Sign in</button>}
       </nav>
     </header>
   );

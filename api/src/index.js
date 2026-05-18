@@ -21,17 +21,17 @@ app.use(express.json());
 app.use(cookieParser());
 
 // ── Rate limiting ───────────────────────────────────────────────────────────
-app.use("/api/v1/search", rateLimit({ windowMs: 60_000, max: 60, standardHeaders: true, legacyHeaders: false }));
-app.use("/api/v1/documents/upload", rateLimit({ windowMs: 60_000, max: 50, standardHeaders: true, legacyHeaders: false }));
+app.use("/v1/search", rateLimit({ windowMs: 60_000, max: 60, standardHeaders: true, legacyHeaders: false }));
+app.use("/v1/documents/upload", rateLimit({ windowMs: 60_000, max: 50, standardHeaders: true, legacyHeaders: false }));
 
 // ── Routes ──────────────────────────────────────────────────────────────────
-app.use("/api/v1/auth", authRouter);
-app.use("/api/v1/documents", documentsRouter);
-app.use("/api/v1/search", searchRouter);
+app.use("/v1/auth", authRouter);
+app.use("/v1/documents", documentsRouter);
+app.use("/v1/search", searchRouter);
 
 // ── Guest session creation ──────────────────────────────────────────────────
 // Called by the frontend before a guest's first upload so we have a session ID.
-app.post("/api/v1/guest/session", async (_req, res) => {
+app.post("/v1/guest/session", async (_req, res) => {
   const { rows } = await pool.query(
     "INSERT INTO guest_sessions (expires_at) VALUES (NOW() + INTERVAL '10 minutes') RETURNING id"
   );
