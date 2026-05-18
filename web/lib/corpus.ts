@@ -8,6 +8,7 @@ export interface Doc {
   uploaded: string;
   expires_in_days: number;
   is_public: boolean;
+  status: "pending" | "processing" | "ready" | "error";
 }
 
 export interface Sentence {
@@ -38,6 +39,7 @@ export const CORPUS_DOCS: Doc[] = [
     uploaded: "3 days ago",
     expires_in_days: 27,
     is_public: false,
+    status: "ready" as const,
   },
   {
     id: "doc-att",
@@ -49,6 +51,7 @@ export const CORPUS_DOCS: Doc[] = [
     uploaded: "1 day ago",
     expires_in_days: 29,
     is_public: false,
+    status: "ready" as const,
   },
   {
     id: "doc-lec",
@@ -60,6 +63,7 @@ export const CORPUS_DOCS: Doc[] = [
     uploaded: "6 hours ago",
     expires_in_days: 30,
     is_public: false,
+    status: "ready" as const,
   },
   {
     id: "doc-iso",
@@ -71,6 +75,7 @@ export const CORPUS_DOCS: Doc[] = [
     uploaded: "11 minutes ago",
     expires_in_days: 30,
     is_public: false,
+    status: "ready" as const,
   },
 ];
 

@@ -6,6 +6,7 @@ import authRouter from "./routes/auth.js";
 import documentsRouter from "./routes/documents.js";
 import searchRouter from "./routes/search.js";
 import { startCleanupJob } from "./services/cleanup.js";
+import { startWorker } from "./services/worker.js";
 import { pool } from "./db.js";
 
 const app = express();
@@ -58,4 +59,5 @@ app.use((err, _req, res, _next) => {
 app.listen(PORT, () => {
   console.log(`API listening on http://localhost:${PORT}`);
   startCleanupJob();
+  startWorker();
 });

@@ -494,6 +494,8 @@ kbd {
 .doc-card--ingest[data-error="true"] .ingest-tag { color: #c0392b; background: color-mix(in srgb, #c0392b 16%, transparent); }
 .doc-card--ingest[data-error="true"] .ingest-bar { background: #c0392b; }
 .doc-card--ingest[data-error="true"] .ingest-step { color: #c0392b; }
+.ingest-bar--pulse { width: 100% !important; animation: ingest-pulse 1.8s ease-in-out infinite; }
+@keyframes ingest-pulse { 0%,100% { opacity: .35; } 50% { opacity: 1; } }
 
 /* ── Results view ──────────────────────────────────────────────────────── */
 .results-view { display: flex; flex-direction: column; gap: 20px; }

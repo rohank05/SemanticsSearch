@@ -16,6 +16,7 @@ interface IngestingDoc {
 interface DocLibraryProps {
   publicDocs: Doc[];
   userDocs: Doc[];
+  pendingDocs: Doc[];
   onUploadClick: () => void;
   ingestingDocs: IngestingDoc[];
 }
@@ -47,7 +48,7 @@ function DocCard({ d }: { d: Doc }) {
   );
 }
 
-export default function DocLibrary({ publicDocs, userDocs, onUploadClick, ingestingDocs }: DocLibraryProps) {
+export default function DocLibrary({ publicDocs, userDocs, pendingDocs, onUploadClick, ingestingDocs }: DocLibraryProps) {
   return (
     <div className="doc-lib">
       {publicDocs.length > 0 && (
@@ -67,6 +68,22 @@ export default function DocLibrary({ publicDocs, userDocs, onUploadClick, ingest
       </div>
       <div className="doc-lib-grid">
         {userDocs.map((d) => <DocCard key={d.id} d={d} />)}
+
+        {pendingDocs.map((doc) => (
+          <article key={doc.id} className="doc-card doc-card--ingest">
+            <div className="doc-card-top">
+              <MimeBadge type={doc.mime} />
+              <span className="ingest-tag">{doc.status}</span>
+            </div>
+            <h4 className="doc-card-title">{doc.short}</h4>
+            <div className="ingest-progress">
+              <div className="ingest-bar ingest-bar--pulse" />
+            </div>
+            <div className="ingest-step">
+              {doc.status === "pending" ? "Queued — worker will pick this up shortly" : "Processing…"}
+            </div>
+          </article>
+        ))}
 
         {ingestingDocs.map((doc) => (
           <article key={doc.key} className="doc-card doc-card--ingest" data-error={doc.status === "error" ? "true" : undefined}>

@@ -75,6 +75,7 @@ function toSearchResult(r: ApiSearchResult): SearchResult {
       uploaded: "",
       expires_in_days: 30,
       is_public: false,
+      status: "ready" as const,
     },
   };
 }
@@ -100,6 +101,7 @@ function toDoc(d: ApiDocument) {
     uploaded: new Date(d.created_at).toLocaleDateString(),
     expires_in_days: expiresInDays,
     is_public: d.is_public,
+    status: d.status,
   };
 }
 
@@ -161,7 +163,7 @@ export default function SearchPage() {
 
   const loadDocs = useCallback(() => {
     listDocuments()
-      .then((apiDocs) => setDocs(apiDocs.filter((d) => d.status === "ready").map(toDoc)))
+      .then((apiDocs) => setDocs(apiDocs.map(toDoc)))
       .catch(() => {});
   }, []);
 
@@ -177,6 +179,14 @@ export default function SearchPage() {
     window.addEventListener("auth:expired", handle);
     return () => window.removeEventListener("auth:expired", handle);
   }, []);
+
+  // Poll loadDocs while any doc is still being processed by the server worker
+  useEffect(() => {
+    const hasInFlight = docs.some((d) => d.status === "pending" || d.status === "processing");
+    if (!hasInFlight) return;
+    const id = setInterval(loadDocs, 3_000);
+    return () => clearInterval(id);
+  }, [docs, loadDocs]);
 
   // Debounced search — hits real API
   useEffect(() => {
@@ -301,8 +311,9 @@ export default function SearchPage() {
     }
   };
 
-  const publicDocs = docs.filter((d) => d.is_public);
-  const userDocs   = docs.filter((d) => !d.is_public);
+  const publicDocs    = docs.filter((d) => d.is_public && d.status === "ready");
+  const userDocs      = docs.filter((d) => !d.is_public && d.status === "ready");
+  const pendingDocs   = docs.filter((d) => !d.is_public && (d.status === "pending" || d.status === "processing"));
   const docCount   = docFilter.length || docs.length;
 
   return (
@@ -361,6 +372,7 @@ export default function SearchPage() {
               <DocLibrary
                 publicDocs={publicDocs}
                 userDocs={userDocs}
+                pendingDocs={pendingDocs}
                 onUploadClick={() => fileInputRef.current?.click()}
                 ingestingDocs={ingestingDocs}
               />

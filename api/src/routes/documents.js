@@ -1,8 +1,10 @@
 import { Router } from "express";
 import multer from "multer";
+import { writeFileSync, mkdirSync } from "fs";
+import { join } from "path";
 import { requireSession, optionalSession } from "../middleware/auth.js";
 import { pool } from "../db.js";
-import { ingestDocument } from "../services/ingestion.js";
+import { UPLOAD_DIR } from "../services/worker.js";
 
 const router = Router();
 
@@ -50,8 +52,9 @@ router.post("/upload", requireSession, upload.single("file"), async (req, res) =
 
   const documentId = rows[0].id;
 
-  // Kick off async ingestion — do not await
-  ingestDocument(documentId, file.buffer, file.mimetype).catch(console.error);
+  // Persist the file buffer for the queue worker to pick up
+  mkdirSync(UPLOAD_DIR, { recursive: true });
+  writeFileSync(join(UPLOAD_DIR, `${documentId}.bin`), file.buffer);
 
   res.status(202).json({ document_id: documentId, status: "pending" });
 });
@@ -61,7 +64,7 @@ router.get("/", optionalSession, async (req, res) => {
   const { rows } = await pool.query(
     `SELECT id, file_name, mime_type, status, total_sentences, expires_at, created_at, is_public
      FROM documents
-     WHERE is_public = true OR owner_id = $1 OR guest_session_id = $2
+     WHERE (is_public = true OR owner_id = $1 OR guest_session_id = $2)
      ORDER BY is_public DESC, created_at DESC`,
     [req.user?.sub ?? null, req.guestSessionId ?? null]
   );
