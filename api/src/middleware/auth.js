@@ -48,10 +48,14 @@ export async function requireSession(req, res, next) {
 }
 
 // Attaches req.user or req.guestSessionId if credentials are present, but never rejects.
-export async function optionalSession(req, _res, next) {
+// Exception: if an Authorization header is present but the token is invalid/expired,
+// returns 401 so the client refresh-retry flow can fire instead of silently dropping it.
+export async function optionalSession(req, res, next) {
   const token = req.headers.authorization?.replace("Bearer ", "");
   if (token) {
-    try { req.user = jwt.verify(token, ACCESS_SECRET); } catch { /* ignore */ }
+    try { req.user = jwt.verify(token, ACCESS_SECRET); } catch {
+      return res.status(401).json({ error: "Invalid or expired token" });
+    }
   }
   if (!req.user) {
     const guestId = req.headers["x-guest-session-id"] || req.cookies?.guest_session_id;

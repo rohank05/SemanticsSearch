@@ -41,7 +41,38 @@ function signalAuthExpired() {
   }
 }
 
+// Decode JWT exp claim without verifying signature — good enough for a client-side expiry check.
+function isTokenExpired(token: string): boolean {
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    // 30s buffer so we refresh slightly before the server would reject it
+    return typeof payload.exp === "number" && payload.exp * 1000 < Date.now() + 30_000;
+  } catch {
+    return true;
+  }
+}
+
+// Proactively refresh before any request if the stored token is already expired.
+// This prevents a wasted round-trip and works for every route — optionalSession or requireSession.
+let refreshInFlight: Promise<boolean> | null = null;
+async function ensureFreshToken(): Promise<boolean> {
+  const token = getAccessToken();
+  if (!token || !isTokenExpired(token)) return true;
+  // Deduplicate concurrent calls (e.g. parallel apiFetch calls on page load)
+  if (!refreshInFlight) refreshInFlight = refreshAccessToken().finally(() => { refreshInFlight = null; });
+  const ok = await refreshInFlight;
+  if (!ok) signalAuthExpired();
+  return ok;
+}
+
 async function apiFetch(path: string, init: RequestInit = {}, _retry = false): Promise<Response> {
+  if (!_retry && !(await ensureFreshToken())) {
+    return new Response(JSON.stringify({ error: "Session expired" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   const res = await fetch(`${BASE}${path}`, {
     ...init,
     credentials: "include",
@@ -59,6 +90,13 @@ async function apiFetch(path: string, init: RequestInit = {}, _retry = false): P
 
 // Multipart upload — cannot use apiFetch (browser must set Content-Type with boundary)
 async function apiUpload(path: string, form: FormData, _retry = false): Promise<Response> {
+  if (!_retry && !(await ensureFreshToken())) {
+    return new Response(JSON.stringify({ error: "Session expired" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   const res = await fetch(`${BASE}${path}`, {
     method: "POST",
     credentials: "include",
